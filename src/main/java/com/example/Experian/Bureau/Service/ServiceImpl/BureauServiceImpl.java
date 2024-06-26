@@ -11,16 +11,6 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import com.example.Experian.Bureau.Service.Entity.BureauDto;
-import com.example.Experian.Bureau.Service.Exception.DobformatException;
-import com.example.Experian.Bureau.Service.Exception.EmptyDobException;
-import com.example.Experian.Bureau.Service.Exception.EmptyPanException;
-import com.example.Experian.Bureau.Service.Exception.Emptyfirstnameexception;
-import com.example.Experian.Bureau.Service.Exception.EmptylastnameException;
-import com.example.Experian.Bureau.Service.Exception.InvalidParameterException;
-import com.example.Experian.Bureau.Service.Exception.InvalidPhonenumException;
-import com.example.Experian.Bureau.Service.Exception.NotfoundException;
-import com.example.Experian.Bureau.Service.Exception.PhonnumRequiredException;
-import com.example.Experian.Bureau.Service.Exception.pincoderequireexception;
 import com.example.Experian.Bureau.Service.Repository.ApiLogRepository;
 import com.example.Experian.Bureau.Service.Service.BureauService;
 import com.example.Experian.Bureau.Service.Utils.ApiLog;
@@ -54,7 +44,7 @@ public class BureauServiceImpl implements BureauService {
 		String Url = config.getApiurl();
 		String requestUrl = request1.getRequestURI().toString();
 
-		int statusCode = response.getStatus();
+//		int statusCode = response.getStatus();
 		bureauDto.getPhoneNumber();
 
 		bureauDto.getPan();
@@ -77,63 +67,50 @@ public class BureauServiceImpl implements BureauService {
 		ApiLog apiLog = new ApiLog();
 		apiLog.setUrl(requestUrl);
 		apiLog.setRequestBody(requestBodyJson);
-
+		String response1 = null;
 		try {
-			String response1 = restTemplate.postForObject(Url, entity, String.class);
+			response1 = restTemplate.postForObject(Url, entity, String.class);
 			apiLog.setResponseBody(response1);
 			apiLog.setStatusCode(HttpStatus.OK.value());
 			apiLog.setStatus("SUCCESS");
 
 			return response1;
 
-		} catch (HttpClientErrorException.BadRequest e) {
-			String errorMessage = e.getResponseBodyAsString();
-			apiLog.setResponseBody(errorMessage);
+		} catch (HttpClientErrorException.TooManyRequests e) {
+			// Handling Too Many Requests Exception specifically
+			apiLog.setStatusCode(HttpStatus.TOO_MANY_REQUESTS.value());
+			apiLog.setStatus("FAILURE");
+			response1 = e.getResponseBodyAsString();
+			System.out.println(response1 + "Response");
+			apiLog.setResponseBodyAsJson("API rate limit exceeded");
+		} catch (HttpClientErrorException.Unauthorized e) {
+			// Handling Unauthorized Exception specifically
+			apiLog.setStatusCode(HttpStatus.UNAUTHORIZED.value());
+			apiLog.setStatus("FAILURE");
+			response1 = e.getResponseBodyAsString();
+			System.out.println(response1 + "Response");
+			apiLog.setResponseBodyAsJson("No API key found in request");
+
+		}
+
+		catch (HttpClientErrorException e) {
 			apiLog.setStatusCode(e.getStatusCode().value());
 			apiLog.setStatus("FAILURE");
+			response1 = e.getResponseBodyAsString();
+			apiLog.setResponseBody(response1);
+		}
 
-			if (errorMessage.contains("Invalid phoneNumber")) {
-				throw new InvalidPhonenumException("Invalid phoneNumber");
-			} else if (errorMessage.contains("\\\"phoneNumber\\\" must be a number")) {
+		catch (Exception e) {
+			apiLog.setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR.value());
+			apiLog.setStatus("ERROR");
+			response1 = e.getMessage();
+			apiLog.setResponseBody(response1);
+		}
 
-				throw new PhonnumRequiredException("\\\"phoneNumber\\\" must be a number");
-
-			} else if (errorMessage.contains("Invalid/missing input parameter")) {
-				throw new InvalidParameterException("Invalid/missing input parameter");
-			} else if (errorMessage.contains("\\\"dateOfBirth\\\" is not allowed to be empty")) {
-				throw new EmptyDobException("\\\"dateOfBirth\\\" is not allowed to be empty");
-			} else if (errorMessage.contains("\\\"dateOfBirth\\\" with value")) {
-				throw new DobformatException(bureauDto.getDateOfBirth());
-			} else if (errorMessage.contains("\\\"pan\\\" is not allowed to be empty")) {
-				throw new EmptyPanException("\\\"pan\\\" is not allowed to be empty");
-			} else if (errorMessage.contains("\\\"firstName\\\" is not allowed to be empty")) {
-				throw new Emptyfirstnameexception("\\\"firstName\\\" is not allowed to be empty");
-			} else if (errorMessage.contains("\\\"lastName\\\" is not allowed to be empty")) {
-				throw new EmptylastnameException("\\\"lastName\\\" is not allowed to be empty");
-			} else if (errorMessage.contains("Invalid pincode")) {
-				throw new pincoderequireexception("Invalid pincode");
-			}
-
-			else {
-				throw e;
-			}
-		} catch (HttpClientErrorException.NotFound e) {
-			{
-				String errorMessage = e.getResponseBodyAsString();
-				apiLog.setResponseBody(errorMessage);
-				apiLog.setStatusCode(e.getStatusCode().value());
-				apiLog.setStatus("FAILURE");
-
-				if (errorMessage.contains("No Record Found")) {
-					throw new NotfoundException("No Record Found");
-				} else {
-					throw e;
-				}
-			}
-
-		} finally {
+		finally {
 			apiLogRepository.save(apiLog);
 		}
+		return response1;
 
 	}
 
